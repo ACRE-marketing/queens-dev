@@ -18,13 +18,14 @@ permissions:
 
 jobs:
   run-daily:
+     run-daily:
     if: github.event.schedule == '0 12 * * *' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0            # ✅ 必须：拿到完整历史，便于 rebase
-          persist-credentials: true # 使用默认 GITHUB_TOKEN 推送
+          fetch-depth: 0
+          persist-credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -39,6 +40,25 @@ jobs:
       - name: Run daily crawl (48h freshness)
         run: python run.py daily
 
+      # ① 列目录，确认文件是否存在
+      - name: Show output tree
+        run: |
+          echo "PWD: $(pwd)"
+          ls -la
+          ls -la data || true
+          ls -la data/output || true
+          [ -f data/output/queens_dev_news.xlsx ] && echo "Excel exists." || echo "Excel NOT found."
+
+      # ② 上传构建产物，方便你在 Actions 页面直接下载核对
+      - name: Upload Excel artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: queens_dev_news.xlsx
+          path: data/output/queens_dev_news.xlsx
+          if-no-files-found: warn
+
+      # ③ 提交并推送（强制 add，防止被 .gitignore 忽略）
       - name: Commit & push Excel (safe rebase)
         env:
           BRANCH_NAME: ${{ github.ref_name }}
@@ -46,16 +66,16 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add data/output/queens_dev_news.xlsx
+          # 关键：强制把 Excel 纳入
+          git add -f data/output/queens_dev_news.xlsx
           git commit -m "chore: update daily Queens dev news Excel [skip ci]" || echo "No changes"
 
-          # ✅ 核心：推送前先把远端更新 rebase 进来，避免 non-fast-forward
           git pull --rebase origin "$BRANCH_NAME" || true
-
-          # 推到当前分支
           git push origin HEAD:"$BRANCH_NAME"
 
+
   run-weekly:
+      run-weekly:
     if: github.event.schedule == '5 12 * * 1' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -77,6 +97,25 @@ jobs:
       - name: Run weekly rollup (7d freshness)
         run: python run.py weekly
 
+      # ① 列目录，确认文件是否生成
+      - name: Show output tree
+        run: |
+          echo "PWD: $(pwd)"
+          ls -la
+          ls -la data || true
+          ls -la data/output || true
+          [ -f data/output/queens_dev_news.xlsx ] && echo "Excel exists." || echo "Excel NOT found."
+
+      # ② 上传构建产物，方便你在 Actions 页面下载
+      - name: Upload Excel artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: queens_dev_news.xlsx
+          path: data/output/queens_dev_news.xlsx
+          if-no-files-found: warn
+
+      # ③ 提交并推送（强制 add，避免被忽略）
       - name: Commit & push Excel (safe rebase)
         env:
           BRANCH_NAME: ${{ github.ref_name }}
@@ -84,8 +123,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add data/output/queens_dev_news.xlsx
-          git commit -m "chore: update weekly Queens rollup Excel [skip ci]" || echo "No changes"
+          git add -f data/output/queens_dev_news.xlsx
+          git commit -m "chore: update weekly
 
-          git pull --rebase origin "$BRANCH_NAME" || true
-          git push origin HEAD:"$BRANCH_NAME"
